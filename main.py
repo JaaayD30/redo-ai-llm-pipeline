@@ -1,57 +1,34 @@
 # main.py
 
-import os
-import json
+import torch
 from rag.retriever import retrieve_context
 from deepseek.refiner import refine_prompt
 from bert.embedding import embed_prompt
+from utils.save_data import save_output
 
-OUTPUT_PATH = os.path.join("outputs", "training_data.jsonl")
-os.makedirs("outputs", exist_ok=True)
+print("\n🚀 Starting REDO-AI Pipeline...")
 
-print("REDO AI Pipeline Started\n")
+# Let user provide inputs
+design_brief = input("\n Enter your Design Brief: ")
+instruction = input(" Enter your Instruction: ")
 
-while True:
-    print("Enter a logo instruction (or type 'exit' to quit):")
-    instruction = input("Instruction: ").strip()
-    if instruction.lower() == "exit":
-        break
+# Step 1: Retrieve principles
+print("\n[MAIN] Retrieving related design principles...")
+related = retrieve_context(instruction, k=5)
+print(f"[MAIN] Retrieved {len(related)} related principles")
 
-    design_brief = input("Design Brief: ").strip()
+# Step 2: Refine using LLM
+summary, detailed = refine_prompt(instruction, related, design_brief)
+print("\n[MAIN] Refined Summary:", summary)
 
-    # Step 1: Retrieve context
-    context = retrieve_context(instruction)
-    print("\n[1] Retrieved Context:")
-    for item in context:
-        print(f"- ({item['title']}) {item['principle']}")
+# Step 3: Embed refined prompt
+embedding = embed_prompt(summary)
+print("[MAIN] Embedding shape:", embedding.shape)
 
-    # Step 2: Refine prompt using DeepSeek
-    summary_prompt, detailed_prompt = refine_prompt(instruction, context, design_brief)
+# Show first 5 dimensions of the vector
+print("[MAIN] First 5 dims of embedding:", embedding[0][:5].tolist())
 
-    print("\n[2] 🪄 Refined Prompt (for user display):")
-    print(summary_prompt)
+# Step 4: Save to dataset
+save_output(instruction, design_brief, detailed, embedding)
 
-    print("\n[2.1] Refined Details (sent to BERT):")
-    print("=" * 30)
-    print(detailed_prompt)
-    print("=" * 30)
-
-    # Step 3: Embed the detailed version
-    vector = embed_prompt(detailed_prompt)[0].tolist()
-    print("\n[3] BERT Embedding (first 5 dims):")
-    print(vector[:5])
-
-    # Step 4: Save training data
-    entry = {
-        "instruction": instruction,
-        "design_brief": design_brief,
-        "summary_prompt": summary_prompt,
-        "refined_prompt": detailed_prompt,
-        "embedding": vector
-    }
-
-    with open(OUTPUT_PATH, "a", encoding="utf-8") as f:
-        f.write(json.dumps(entry) + "\n")
-
-    print(f"\n✅ Saved to {OUTPUT_PATH}")
-    print("\n" + "-"*60 + "\n")
+print("\n✅ Pipeline finished successfully!")
